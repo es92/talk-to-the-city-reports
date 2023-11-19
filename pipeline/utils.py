@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 import json
 import os
 import traceback
+import pickle
+import hashlib
 
 with open("./specs.json") as f:
     specs = json.load(f)
@@ -293,3 +295,28 @@ def termination(config, error=None):
             'error_stack_trace': traceback.format_exc()
         })
         raise error
+
+def run_with_cache(config, fn, *args, **kwargs):
+  dataset = config['output_dir']
+  path = f"outputs/{dataset}/cache/"
+  if not os.path.exists(path):
+      os.makedirs(path)
+
+  inputs = {
+      'args': args,
+      'kwargs': kwargs
+  }
+
+  key = hashlib.sha1(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
+  file = path + str(key) + '.pkl'
+
+  if os.path.isfile(file):
+    with open(file, 'rb') as f:
+      return pickle.load(f)
+
+  result = fn(*args, **kwargs)
+
+  with open(file, 'wb') as f:
+    pickle.dump(result, f)
+
+  return result

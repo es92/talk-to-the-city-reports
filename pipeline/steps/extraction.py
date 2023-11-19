@@ -3,7 +3,7 @@ import json
 from tqdm import tqdm
 import pandas as pd
 from langchain.chat_models import ChatOpenAI
-from utils import messages, update_progress
+from utils import messages, update_progress, run_with_cache
 import concurrent.futures
 
 
@@ -11,7 +11,6 @@ def extraction(config):
     dataset = config['output_dir']
     path = f"outputs/{dataset}/args.csv"
     comments = pd.read_csv(f"inputs/{config['input']}.csv")
-
     model = config['extraction']['model']
     prompt = config['extraction']['prompt']
     workers = config['extraction']['workers']
@@ -24,7 +23,7 @@ def extraction(config):
     for i in tqdm(range(0, len(comment_ids), workers)):
         batch = comment_ids[i: i + workers]
         batch_inputs = [comments.loc[id]['comment-body'] for id in batch]
-        batch_results = extract_batch(batch_inputs, prompt, model, workers)
+        batch_results = extract_batch(config, batch_inputs, prompt, model, workers)
         for comment_id, extracted_args in zip(batch, batch_results):
             for j, arg in enumerate(extracted_args):
                 new_row = {"arg-id": f"A{comment_id}_{j}",
@@ -35,13 +34,15 @@ def extraction(config):
     results.to_csv(path, index=False)
 
 
-def extract_batch(batch, prompt, model, workers):
+def extract_batch(config, batch, prompt, model, workers):
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(
-            extract_arguments, input, prompt, model) for input in list(batch)]
+            extract_arguments_with_cache, config, input, prompt, model) for input in list(batch)]
         concurrent.futures.wait(futures)
         return [future.result() for future in futures]
 
+def extract_arguments_with_cache(config, input, prompt, model, retries=3):
+    return run_with_cache(config, extract_arguments, input, prompt, model, retries=3)
 
 def extract_arguments(input, prompt, model, retries=3):
     llm = ChatOpenAI(model_name=model, temperature=0.0)
