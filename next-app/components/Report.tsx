@@ -14,7 +14,17 @@ const converter = new showdown.Converter();
 
 function Report(props: ReportProps) {
 
-  const [openMap, setOpenMap] = useState<string | null>(null)
+  let searchParams;
+  if (typeof window !== 'undefined') {
+    searchParams = new URLSearchParams(window.location.search);
+  } else {
+    searchParams = new URLSearchParams();
+  }
+
+  const openMapInitially = searchParams.has('map');
+  const initialMap = openMapInitially ? 'main' : null;
+
+  const [openMap, setOpenMap] = useState<string | null>(initialMap)
   const { config, clusters, translations, overview } = props
   const color = useClusterColor(clusters.map(c => c.cluster_id))
   const scroll = useRef(0)
@@ -29,11 +39,23 @@ function Report(props: ReportProps) {
   const totalArgs = clusters.map(c => c.arguments.length).reduce((a, b) => a + b, 0)
 
   if (openMap) {
+    searchParams.set('map', '');
+  } else {
+    searchParams.delete('map');
+  }
+
+  if (typeof window !== 'undefined') {
+    var newRelativePathQuery = window.location.pathname + '?' + searchParams.toString();
+    history.replaceState(null, '', newRelativePathQuery);
+  }
+
+  if (openMap) {
     return <Map {...props} color={color} translator={translator} back={() => {
       setOpenMap(null)
       setTimeout(() => window.scrollTo({ top: scroll.current }), 0)
     }} fullScreen onlyCluster={openMap !== 'main' ? openMap : undefined} />
   }
+
   return <div className='mt-9'>
     <Outline clusters={clusters} translator={translator} />
     <Header {...props} translator={translator} />
